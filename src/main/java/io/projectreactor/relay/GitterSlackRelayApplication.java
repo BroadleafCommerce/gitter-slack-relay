@@ -1,5 +1,6 @@
 package io.projectreactor.relay;
 
+import com.jayway.jsonpath.JsonPath;
 import io.netty.channel.nio.NioEventLoopGroup;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -13,6 +14,7 @@ import reactor.io.codec.json.JsonCodec;
 import reactor.io.net.ReactorChannelHandler;
 import reactor.io.net.http.HttpChannel;
 import reactor.rx.Promise;
+import reactor.rx.Stream;
 import reactor.rx.Streams;
 
 import java.util.Map;
@@ -51,17 +53,28 @@ public class GitterSlackRelayApplication {
 	@Bean
 	public Promise<Void> gitterSlackRelay() {
 		return httpClient()
+				// read from gitter chat
 				.get("https://stream.gitter.im/v1/rooms/" + gitterRoomId + "/chatMessages", gitterHandler())
 				.flatMap(p -> p
-						.filter(b -> b.remaining() > 2)
-						.decode(new JsonCodec<>(Map.class))
-						.window(10, 1, TimeUnit.SECONDS)
-						.flatMap(msgs -> msgs.map(msg -> msg.get("text"))
-						                     .reduce("", (prev, next) -> prev + "\n" + next))
+						.filter(b -> b.remaining() > 2) // drop keep-alives which are just newlines
+						.decode(new JsonCodec<>(Map.class)) // parse to Map
+						.window(10, 1, TimeUnit.SECONDS) // window for 10s
+						.flatMap(this::batchMessages) // transform to newline-delimited String
 						.observe(batch -> {
 							System.out.println("batch: " + batch);
 						})
 						.after());
+	}
+
+	private Stream<String> batchMessages(Stream<Map> in) {
+		return in
+				.map(msg -> {
+					String user = JsonPath.read(msg, "$.fromUser.displayName");
+					String text = JsonPath.read(msg, "$.text");
+					String sent = JsonPath.read(msg, "$.sent");
+					return user + " " + sent + ": " + text;
+				})
+				.reduce("", (prev, next) -> prev + "\n" + next);
 	}
 
 	public static void main(String[] args) throws InterruptedException {
