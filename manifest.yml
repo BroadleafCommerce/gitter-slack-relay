@@ -1,0 +1,6 @@
+---
+applications:
+- name: gitter-slack-relay
+  memory: 512M
+  path: ./build/libs/gitter-slack-relay-0.0.1-SNAPSHOT.jar
+  buildpack: java_buildpack
