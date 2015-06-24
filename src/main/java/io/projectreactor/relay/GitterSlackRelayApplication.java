@@ -30,37 +30,73 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static com.jayway.jsonpath.JsonPath.read;
 import static reactor.io.net.NetStreams.httpClient;
 
+/**
+ * A Spring Boot application that relays messages from a Gitter chat room to a Slack webhook to aggregate content into
+ * a Slack channel.
+ */
 @SpringBootApplication
 public class GitterSlackRelayApplication {
 
 	static {
-		Environment.initializeIfEmpty().assignErrorJournal();
+		// Initialize Reactor Environment only once
+		Environment.initializeIfEmpty()
+		           .assignErrorJournal();
 	}
 
+	/**
+	 * Token used in the Authorization header sent to Gitter's streaming API.
+	 */
 	@Value("${gitter.token}")
 	private String gitterToken;
-	@Value("${gitter.roomId}")
-	private String gitterRoomId;
+	/**
+	 * URL to connect to to stream Gitter messages from a chat room.
+	 */
+	@Value("https://stream.gitter.im/v1/rooms/${gitter.roomId}/chatMessages")
+	private String gitterStreamUrl;
+	/**
+	 * URL to POST formatted messages to to appear in a Slack channel.
+	 */
 	@Value("${slack.webhookUrl}")
 	private String slackWebhookUrl;
 
+	/**
+	 * Whether to shut this service down or not.
+	 *
+	 * @return
+	 */
 	@Bean
 	public AtomicBoolean shutdownFlag() {
 		return new AtomicBoolean(false);
 	}
 
+	/**
+	 * A shared NioEventLoopGroup for reusing resources when creating new HTTP clients.
+	 *
+	 * @return
+	 */
 	@Bean
 	public NioEventLoopGroup sharedEventLoopGroup() {
 		return new NioEventLoopGroup(Environment.PROCESSORS, new NamedDaemonThreadFactory("gitter-slack-relay"));
 	}
 
+	/**
+	 * Reactor {@link reactor.io.net.config.ClientSocketOptions} that pass the {@code sharedEventLoopGroup} to Netty.
+	 *
+	 * @return
+	 */
 	@Bean
 	public NettyClientSocketOptions clientSocketOptions() {
 		return new NettyClientSocketOptions().eventLoopGroup(sharedEventLoopGroup());
 	}
 
+	/**
+	 * Handler for setting the Authorization and Accept headers and leaves the connection open by returning {@link
+	 * reactor.rx.Streams#never()}.
+	 *
+	 * @return
+	 */
 	@Bean
-	public ReactorChannelHandler<Buffer, Buffer, HttpChannel<Buffer, Buffer>> gitterHandler() {
+	public ReactorChannelHandler<Buffer, Buffer, HttpChannel<Buffer, Buffer>> gitterStreamHandler() {
 		return ch -> {
 			ch.header("Authorization", "Bearer " + gitterToken)
 			  .header("Accept", "application/json");
@@ -68,27 +104,25 @@ public class GitterSlackRelayApplication {
 		};
 	}
 
+	/**
+	 * {@link org.springframework.beans.factory.FactoryBean} that creates an HTTP client to connect to Gitter's streaming
+	 * API.
+	 *
+	 * @return
+	 */
 	@Bean
 	public FactoryBean<Promise<Void>> gitterSlackRelay() {
 		return new FactoryBean<Promise<Void>>() {
 			@Override
 			public Promise<Void> getObject() throws Exception {
 				return httpClient()
-						.get("https://stream.gitter.im/v1/rooms/" + gitterRoomId + "/chatMessages", gitterHandler())
+						.get(gitterStreamUrl, gitterStreamHandler())
 						.flatMap(ch -> ch
-								.filter(b -> b.remaining() > 2)
-								.decode(new JsonCodec<>(Map.class))
-								.window(10, 1, TimeUnit.SECONDS)
-								.flatMap(msg -> httpClient(spec -> spec.options(clientSocketOptions()))
-										.post(slackWebhookUrl, out -> {
-											out.header(Headers.CONTENT_TYPE, "application/json");
-											return out.writeWith(msg.map(m -> formatLink(m) +
-											                                  ": " +
-											                                  replaceNewlines(read(m, "$.text")))
-											                        .reduce("", (prev, next) -> (!"".equals(prev) ? prev + "\\\\n" + next : next))
-											                        .map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")));
-										})
-										.flatMap(Stream::after)));
+								.filter(b -> b.remaining() > 2) // ignore keep-alives (\r)
+								.decode(new JsonCodec<>(Map.class)) // ObjectMapper.readValue(Map.class)
+								.window(10, 1, TimeUnit.SECONDS) // microbatch 10 items or 1s worth
+								.flatMap(msg -> postToSlack(msg.map(m -> formatLink(m) + ": " + formatText(m))
+								                               .reduce("", GitterSlackRelayApplication::appendLines))));
 			}
 
 			@Override
@@ -103,6 +137,15 @@ public class GitterSlackRelayApplication {
 		};
 	}
 
+	private Promise<Void> postToSlack(Stream<String> input) {
+		return httpClient(spec -> spec.options(clientSocketOptions()))
+				.post(slackWebhookUrl, out -> {
+					out.header(Headers.CONTENT_TYPE, "application/json");
+					return out.writeWith(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")));
+				})
+				.flatMap(Stream::after);
+	}
+
 	public static void main(String[] args) throws InterruptedException {
 		ApplicationContext ctx = SpringApplication.run(GitterSlackRelayApplication.class, args);
 
@@ -112,21 +155,25 @@ public class GitterSlackRelayApplication {
 		}
 	}
 
-	private static String replaceNewlines(Object o) {
-		return ((String) o).replaceAll("\n", "\\\\n");
-	}
-
-	private static String formatLink(Map m) {
-		return "<https://gitter.im/reactor/reactor?at=" +
-		       read(m, "$.id") + "|" + read(m, "$.fromUser.displayName") + " [" +
-		       formatDate(read(m, "$.sent")) + "]>";
-	}
-
 	private static String formatDate(Object o) {
 		DateTimeFormatter isoDateFmt = ISODateTimeFormat.dateTime();
 		DateTimeFormatter shortFmt = DateTimeFormat.forPattern("d-MMM H:mm:ss");
 		DateTime dte = isoDateFmt.parseDateTime((String) o);
 		return shortFmt.print(dte);
+	}
+
+	private static String formatLink(Map m) {
+		return "<https://gitter.im/reactor/reactor?at=" +
+		       read(m, "$.id") + "|" + read(m, "$.fromUser.displayName") +
+		       " [" + formatDate(read(m, "$.sent")) + "]>";
+	}
+
+	private static String formatText(Map m) {
+		return ((String) read(m, "$.text")).replaceAll("\n", "\\\\n");
+	}
+
+	private static String appendLines(String prev, String next) {
+		return (!"".equals(prev) ? prev + "\\\\n" + next : next);
 	}
 
 }
