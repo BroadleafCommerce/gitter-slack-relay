@@ -1,6 +1,5 @@
 package io.projectreactor.relay;
 
-import com.jayway.jsonpath.JsonPath;
 import io.netty.channel.nio.NioEventLoopGroup;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -13,6 +12,8 @@ import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
 import reactor.io.net.ReactorChannelHandler;
 import reactor.io.net.http.HttpChannel;
+import reactor.io.net.http.model.Headers;
+import reactor.io.net.impl.netty.NettyClientSocketOptions;
 import reactor.rx.Promise;
 import reactor.rx.Stream;
 import reactor.rx.Streams;
@@ -20,6 +21,7 @@ import reactor.rx.Streams;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import static com.jayway.jsonpath.JsonPath.read;
 import static reactor.io.net.NetStreams.httpClient;
 
 @SpringBootApplication
@@ -42,6 +44,11 @@ public class GitterSlackRelayApplication {
 	}
 
 	@Bean
+	public NettyClientSocketOptions clientSocketOptions() {
+		return new NettyClientSocketOptions().eventLoopGroup(sharedEventLoopGroup());
+	}
+
+	@Bean
 	public ReactorChannelHandler<Buffer, Buffer, HttpChannel<Buffer, Buffer>> gitterHandler() {
 		return ch -> {
 			ch.header("Authorization", "Bearer " + gitterToken)
@@ -53,28 +60,23 @@ public class GitterSlackRelayApplication {
 	@Bean
 	public Promise<Void> gitterSlackRelay() {
 		return httpClient()
-				// read from gitter chat
 				.get("https://stream.gitter.im/v1/rooms/" + gitterRoomId + "/chatMessages", gitterHandler())
-				.flatMap(p -> p
-						.filter(b -> b.remaining() > 2) // drop keep-alives which are just newlines
-						.decode(new JsonCodec<>(Map.class)) // parse to Map
-						.window(10, 1, TimeUnit.SECONDS) // window for 10s
-						.flatMap(this::batchMessages) // transform to newline-delimited String
-						.observe(batch -> {
-							System.out.println("batch: " + batch);
-						})
-						.after());
-	}
-
-	private Stream<String> batchMessages(Stream<Map> in) {
-		return in
-				.map(msg -> {
-					String user = JsonPath.read(msg, "$.fromUser.displayName");
-					String text = JsonPath.read(msg, "$.text");
-					String sent = JsonPath.read(msg, "$.sent");
-					return user + " " + sent + ": " + text;
-				})
-				.reduce("", (prev, next) -> prev + "\n" + next);
+				.flatMap(ch -> ch
+						.filter(b -> b.remaining() > 2)
+						.decode(new JsonCodec<>(Map.class))
+						.window(10, 1, TimeUnit.SECONDS)
+						.log("after-window")
+						.flatMap(msg -> httpClient()
+								.post(slackWebhookUrl, out -> {
+									out.header(Headers.CONTENT_TYPE, "application/json");
+									return out.writeWith(msg.map(m -> "*" + read(m, "$.fromUser.displayName") + "* " +
+									                                  "_" + read(m, "$.sent") + "_: " +
+									                                  replaceNewlines(read(m, "$.text")))
+									                        .reduce("", (prev, next) -> (!"".equals(prev) ? prev + "\\\\n" + next : next))
+									                        .log("after-reduce")
+									                        .map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")));
+								})
+								.flatMap(Stream::after)));
 	}
 
 	public static void main(String[] args) throws InterruptedException {
@@ -82,6 +84,14 @@ public class GitterSlackRelayApplication {
 
 		ctx.getBean(Promise.class)
 		   .await(-1, TimeUnit.SECONDS);
+	}
+
+	private static String replaceNewlines(Object o) {
+		if (o instanceof String) {
+			return ((String) o).replaceAll("\n", "\\\\n");
+		} else {
+			return replaceNewlines(String.valueOf(o));
+		}
 	}
 
 }
