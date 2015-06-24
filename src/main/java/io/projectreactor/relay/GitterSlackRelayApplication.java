@@ -5,6 +5,7 @@ import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
+import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -24,6 +25,7 @@ import reactor.rx.Streams;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.jayway.jsonpath.JsonPath.read;
 import static reactor.io.net.NetStreams.httpClient;
@@ -41,6 +43,11 @@ public class GitterSlackRelayApplication {
 	private String gitterRoomId;
 	@Value("${slack.webhookUrl}")
 	private String slackWebhookUrl;
+
+	@Bean
+	public AtomicBoolean shutdownFlag() {
+		return new AtomicBoolean(false);
+	}
 
 	@Bean
 	public NioEventLoopGroup sharedEventLoopGroup() {
@@ -62,31 +69,47 @@ public class GitterSlackRelayApplication {
 	}
 
 	@Bean
-	public Promise<Void> gitterSlackRelay() {
-		return httpClient()
-				.get("https://stream.gitter.im/v1/rooms/" + gitterRoomId + "/chatMessages", gitterHandler())
-				.flatMap(ch -> ch
-						.filter(b -> b.remaining() > 2)
-						.decode(new JsonCodec<>(Map.class))
-						.window(10, 1, TimeUnit.SECONDS)
-						.log("after-window")
-						.flatMap(msg -> httpClient(spec -> spec.options(clientSocketOptions()))
-								.post(slackWebhookUrl, out -> {
-									out.header(Headers.CONTENT_TYPE, "application/json");
-									return out.writeWith(msg.map(m -> formatLink(m) +
-									                                  ": " +
-									                                  replaceNewlines(read(m, "$.text")))
-									                        .reduce("", (prev, next) -> (!"".equals(prev) ? prev + "\\\\n" + next : next))
-									                        .log("after-reduce")
-									                        .map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")));
-								})
-								.flatMap(Stream::after)));
+	public FactoryBean<Promise<Void>> gitterSlackRelay() {
+		return new FactoryBean<Promise<Void>>() {
+			@Override
+			public Promise<Void> getObject() throws Exception {
+				return httpClient()
+						.get("https://stream.gitter.im/v1/rooms/" + gitterRoomId + "/chatMessages", gitterHandler())
+						.flatMap(ch -> ch
+								.filter(b -> b.remaining() > 2)
+								.decode(new JsonCodec<>(Map.class))
+								.window(10, 1, TimeUnit.SECONDS)
+								.flatMap(msg -> httpClient(spec -> spec.options(clientSocketOptions()))
+										.post(slackWebhookUrl, out -> {
+											out.header(Headers.CONTENT_TYPE, "application/json");
+											return out.writeWith(msg.map(m -> formatLink(m) +
+											                                  ": " +
+											                                  replaceNewlines(read(m, "$.text")))
+											                        .reduce("", (prev, next) -> (!"".equals(prev) ? prev + "\\\\n" + next : next))
+											                        .map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")));
+										})
+										.flatMap(Stream::after)));
+			}
+
+			@Override
+			public Class<?> getObjectType() {
+				return Promise.class;
+			}
+
+			@Override
+			public boolean isSingleton() {
+				return false;
+			}
+		};
 	}
 
 	public static void main(String[] args) throws InterruptedException {
 		ApplicationContext ctx = SpringApplication.run(GitterSlackRelayApplication.class, args);
 
-		ctx.getBean(Promise.class).awaitSuccess(-1, TimeUnit.SECONDS);
+		AtomicBoolean shutdownFlag = ctx.getBean(AtomicBoolean.class);
+		while (!shutdownFlag.get()) {
+			ctx.getBean(Promise.class).await(-1, TimeUnit.SECONDS);
+		}
 	}
 
 	private static String replaceNewlines(Object o) {
