@@ -1,10 +1,14 @@
 package io.projectreactor.relay;
 
 import io.netty.channel.nio.NioEventLoopGroup;
+import org.joda.time.DateTime;
+import org.joda.time.format.DateTimeFormat;
+import org.joda.time.format.DateTimeFormatter;
+import org.joda.time.format.ISODateTimeFormat;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.ConfigurableApplicationContext;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 import reactor.Environment;
 import reactor.core.support.NamedDaemonThreadFactory;
@@ -66,11 +70,11 @@ public class GitterSlackRelayApplication {
 						.decode(new JsonCodec<>(Map.class))
 						.window(10, 1, TimeUnit.SECONDS)
 						.log("after-window")
-						.flatMap(msg -> httpClient()
+						.flatMap(msg -> httpClient(spec -> spec.options(clientSocketOptions()))
 								.post(slackWebhookUrl, out -> {
 									out.header(Headers.CONTENT_TYPE, "application/json");
-									return out.writeWith(msg.map(m -> "*" + read(m, "$.fromUser.displayName") + "* " +
-									                                  "_" + read(m, "$.sent") + "_: " +
+									return out.writeWith(msg.map(m -> formatLink(m) +
+									                                  ": " +
 									                                  replaceNewlines(read(m, "$.text")))
 									                        .reduce("", (prev, next) -> (!"".equals(prev) ? prev + "\\\\n" + next : next))
 									                        .log("after-reduce")
@@ -80,18 +84,26 @@ public class GitterSlackRelayApplication {
 	}
 
 	public static void main(String[] args) throws InterruptedException {
-		ConfigurableApplicationContext ctx = SpringApplication.run(GitterSlackRelayApplication.class, args);
+		ApplicationContext ctx = SpringApplication.run(GitterSlackRelayApplication.class, args);
 
-		ctx.getBean(Promise.class)
-		   .await(-1, TimeUnit.SECONDS);
+		ctx.getBean(Promise.class).awaitSuccess(-1, TimeUnit.SECONDS);
 	}
 
 	private static String replaceNewlines(Object o) {
-		if (o instanceof String) {
-			return ((String) o).replaceAll("\n", "\\\\n");
-		} else {
-			return replaceNewlines(String.valueOf(o));
-		}
+		return ((String) o).replaceAll("\n", "\\\\n");
+	}
+
+	private static String formatLink(Map m) {
+		return "<https://gitter.im/reactor/reactor?at=" +
+		       read(m, "$.id") + "|" + read(m, "$.fromUser.displayName") + " [" +
+		       formatDate(read(m, "$.sent")) + "]>";
+	}
+
+	private static String formatDate(Object o) {
+		DateTimeFormatter isoDateFmt = ISODateTimeFormat.dateTime();
+		DateTimeFormatter shortFmt = DateTimeFormat.forPattern("d-MMM H:mm:ss");
+		DateTime dte = isoDateFmt.parseDateTime((String) o);
+		return shortFmt.print(dte);
 	}
 
 }

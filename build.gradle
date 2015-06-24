@@ -34,7 +34,7 @@ sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
 repositories {
-  //mavenLocal()
+  mavenLocal()
   maven { url "https://repo.spring.io/snapshot" }
   maven { url "https://repo.spring.io/milestone" }
   jcenter()
@@ -48,6 +48,7 @@ dependencies {
       "io.projectreactor:reactor-stream:$reactorVersion",
       "io.projectreactor:reactor-net:$reactorVersion",
       "com.jayway.jsonpath:json-path:$jsonPathVersion",
+      "joda-time:joda-time:2.8.1",
       "io.netty:netty-all:$nettyVersion"
 
   testCompile "org.springframework.boot:spring-boot-starter-test"
