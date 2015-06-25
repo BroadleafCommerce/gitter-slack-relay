@@ -132,19 +132,17 @@ public class GitterSlackRelayApplication {
 				.flatMap(Stream::after); //promote completion to returned promise when last reply has been consumed (usually 1 from slack response packet)
 	}
 
-	public static void main(String[] args) throws InterruptedException {
+	public static void main(String[] args) throws Throwable {
 		ApplicationContext ctx = SpringApplication.run(GitterSlackRelayApplication.class, args);
 		GitterSlackRelayApplication app = ctx.getBean(GitterSlackRelayApplication.class);
 
-		Streams
+		Stream<Void> clientState = Streams
 				.defer(app::gitterSlackRelay)
 				.log("gitter-client-state")
 				.repeat() //keep alive if get client closes
-				.retry() //keep alive if any error
-				.consume();
+				.retry(); //keep alive if any error
 
-		//LoggerFactory.getLogger(GitterSlackRelayApplication.class).info("Reconnecting...");
-
+		Streams.await(clientState);
 	}
 
 	private static String formatDate(Object o) {
