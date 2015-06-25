@@ -114,8 +114,8 @@ public class GitterSlackRelayApplication {
 				.flatMap(replies -> replies
 								.filter(b -> b.remaining() > 2) // ignore gitter keep-alives (\r)
 								.decode(new JsonCodec<>(Map.class)) // ObjectMapper.readValue(Map.class)
-								.window(10, 1, TimeUnit.SECONDS) // microbatch 10 items or 1s worth
-								.flatMap(msg -> postToSlack(msg.map(m -> formatLink(m) + ": " + formatText(m))))
+								.window(10, 1, TimeUnit.SECONDS) // microbatch 10 items or 1s worth into individual streams (for reduce ops)
+								.flatMap(w -> postToSlack(w.map(m -> formatLink(m) + ": " + formatText(m))))
 				);
 	}
 
