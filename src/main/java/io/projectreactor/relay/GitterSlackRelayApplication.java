@@ -5,8 +5,6 @@ import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -41,7 +39,7 @@ public class GitterSlackRelayApplication {
 	static {
 		// Initialize Reactor Environment only once
 		Environment.initializeIfEmpty()
-		           .assignErrorJournal();
+				.assignErrorJournal();
 	}
 
 	/**
@@ -100,64 +98,49 @@ public class GitterSlackRelayApplication {
 	public ReactorChannelHandler<Buffer, Buffer, HttpChannel<Buffer, Buffer>> gitterStreamHandler() {
 		return ch -> {
 			ch.header("Authorization", "Bearer " + gitterToken)
-			  .header("Accept", "application/json");
+					.header("Accept", "application/json");
 			return Streams.never();
 		};
 	}
 
 	/**
-	 * {@link org.springframework.beans.factory.FactoryBean} that creates an HTTP client to connect to Gitter's streaming
-	 * API.
+	 * creates an HTTP client to connect to Gitter's streaming API.
 	 *
 	 * @return
 	 */
-	@Bean
-	public FactoryBean<Promise<Void>> gitterSlackRelay() {
-		return new FactoryBean<Promise<Void>>() {
-			@Override
-			public Promise<Void> getObject() throws Exception {
-				return httpClient()
-						.get(gitterStreamUrl, gitterStreamHandler())
-						.flatMap(ch -> ch
-								.filter(b -> b.remaining() > 2) // ignore keep-alives (\r)
+	public Promise<Void> gitterSlackRelay() {
+		return httpClient()
+				.get(gitterStreamUrl, gitterStreamHandler())
+				.flatMap(replies -> replies
+								.filter(b -> b.remaining() > 2) // ignore gitter keep-alives (\r)
 								.decode(new JsonCodec<>(Map.class)) // ObjectMapper.readValue(Map.class)
 								.window(10, 1, TimeUnit.SECONDS) // microbatch 10 items or 1s worth
-								.flatMap(msg -> postToSlack(msg.map(m -> formatLink(m) + ": " + formatText(m))
-								                               .reduce("", GitterSlackRelayApplication::appendLines))));
-			}
-
-			@Override
-			public Class<?> getObjectType() {
-				return Promise.class;
-			}
-
-			@Override
-			public boolean isSingleton() {
-				return false;
-			}
-		};
+								.flatMap(msg -> postToSlack(msg.map(m -> formatLink(m) + ": " + formatText(m))))
+				);
 	}
 
 	private Promise<Void> postToSlack(Stream<String> input) {
 		return httpClient(spec -> spec.options(clientSocketOptions()))
-				.post(slackWebhookUrl, out -> {
-					out.header(Headers.CONTENT_TYPE, "application/json");
-					return out.writeWith(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")));
-				})
+				.post(slackWebhookUrl, out ->
+								out.header(Headers.CONTENT_TYPE, "application/json")
+										.writeWith(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
+				)
 				.flatMap(Stream::after);
 	}
 
 	public static void main(String[] args) throws InterruptedException {
 		ApplicationContext ctx = SpringApplication.run(GitterSlackRelayApplication.class, args);
+		GitterSlackRelayApplication app = ctx.getBean(GitterSlackRelayApplication.class);
 
-		AtomicBoolean shutdownFlag = ctx.getBean(AtomicBoolean.class);
-		while (!shutdownFlag.get()) {
-			Promise p = ctx.getBean(Promise.class);
-			p.await(-1, TimeUnit.SECONDS);
-			if (!shutdownFlag.get()) {
-				LoggerFactory.getLogger(GitterSlackRelayApplication.class).info("Reconnecting...");
-			}
-		}
+		Streams
+				.defer(app::gitterSlackRelay)
+				.log("gitter-client-state")
+				.repeat() //keep alive if get client close
+				.retry() //keep alive if any error
+				.consume();
+
+		//LoggerFactory.getLogger(GitterSlackRelayApplication.class).info("Reconnecting...");
+
 	}
 
 	private static String formatDate(Object o) {
@@ -169,8 +152,8 @@ public class GitterSlackRelayApplication {
 
 	private static String formatLink(Map m) {
 		return "<https://gitter.im/reactor/reactor?at=" +
-		       read(m, "$.id") + "|" + read(m, "$.fromUser.displayName") +
-		       " [" + formatDate(read(m, "$.sent")) + "]>";
+				read(m, "$.id") + "|" + read(m, "$.fromUser.displayName") +
+				" [" + formatDate(read(m, "$.sent")) + "]>";
 	}
 
 	private static String formatText(Map m) {
