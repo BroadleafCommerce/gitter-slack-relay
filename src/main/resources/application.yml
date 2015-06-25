@@ -1,5 +1,6 @@
 logging:
   level:
+    gitter-client-state: INFO
     reactor:
       io:
         net:
