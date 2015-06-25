@@ -43,6 +43,7 @@ repositories {
 
 dependencies {
   compile "org.springframework.boot:spring-boot-starter-actuator",
+      "org.springframework.boot:spring-boot-starter-web",
       "io.projectreactor:reactor-core:$reactorVersion",
       "io.projectreactor:reactor-bus:$reactorVersion",
       "io.projectreactor:reactor-stream:$reactorVersion",
