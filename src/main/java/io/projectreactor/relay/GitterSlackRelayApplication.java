@@ -5,6 +5,7 @@ import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.FactoryBean;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -151,7 +152,11 @@ public class GitterSlackRelayApplication {
 
 		AtomicBoolean shutdownFlag = ctx.getBean(AtomicBoolean.class);
 		while (!shutdownFlag.get()) {
-			ctx.getBean(Promise.class).await(-1, TimeUnit.SECONDS);
+			Promise p = ctx.getBean(Promise.class);
+			p.await(-1, TimeUnit.SECONDS);
+			if (!shutdownFlag.get()) {
+				LoggerFactory.getLogger(GitterSlackRelayApplication.class).info("Reconnecting...");
+			}
 		}
 	}
 
