@@ -119,7 +119,7 @@ public class GitterSlackRelayApplication {
 										w.map(m -> formatLink(m) + ": " + formatText(m))
 										.reduce("", GitterSlackRelayApplication::appendLines))
 								)
-				);
+				); // only complete when all windows have completed AND gitter GET connection has closed
 	}
 
 	private Promise<Void> postToSlack(Stream<String> input) {
@@ -127,8 +127,9 @@ public class GitterSlackRelayApplication {
 				.post(slackWebhookUrl, out ->
 								out.header(Headers.CONTENT_TYPE, "application/json")
 										.writeWith(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
+						//will close after write has flushed the batched window
 				)
-				.flatMap(Stream::after);
+				.flatMap(Stream::after); //promote completion to returned promise last reply has been consumed (usually 1 from slack response packet)
 	}
 
 	public static void main(String[] args) throws InterruptedException {
@@ -138,7 +139,7 @@ public class GitterSlackRelayApplication {
 		Streams
 				.defer(app::gitterSlackRelay)
 				.log("gitter-client-state")
-				.repeat() //keep alive if get client close
+				.repeat() //keep alive if get client closes
 				.retry() //keep alive if any error
 				.consume();
 
