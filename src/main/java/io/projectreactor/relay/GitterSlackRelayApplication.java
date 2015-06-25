@@ -129,7 +129,7 @@ public class GitterSlackRelayApplication {
 										.writeWith(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
 						//will close after write has flushed the batched window
 				)
-				.flatMap(Stream::after); //promote completion to returned promise last reply has been consumed (usually 1 from slack response packet)
+				.flatMap(Stream::after); //promote completion to returned promise when last reply has been consumed (usually 1 from slack response packet)
 	}
 
 	public static void main(String[] args) throws InterruptedException {
