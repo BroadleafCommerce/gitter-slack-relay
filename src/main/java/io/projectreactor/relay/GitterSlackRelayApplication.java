@@ -10,7 +10,7 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
-import reactor.Environment;
+import reactor.Processors;
 import reactor.core.support.NamedDaemonThreadFactory;
 import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
@@ -18,7 +18,6 @@ import reactor.io.net.ReactorChannelHandler;
 import reactor.io.net.http.HttpChannel;
 import reactor.io.net.http.model.Headers;
 import reactor.io.net.impl.netty.NettyClientSocketOptions;
-import reactor.rx.Promise;
 import reactor.rx.Stream;
 import reactor.rx.Streams;
 
@@ -35,13 +34,6 @@ import static reactor.io.net.NetStreams.httpClient;
  */
 @SpringBootApplication
 public class GitterSlackRelayApplication {
-
-	static {
-		// Initialize Reactor Environment only once
-		Environment.initializeIfEmpty()
-				.assignErrorJournal();
-	}
-
 	/**
 	 * Token used in the Authorization header sent to Gitter's streaming API.
 	 */
@@ -75,7 +67,7 @@ public class GitterSlackRelayApplication {
 	 */
 	@Bean
 	public NioEventLoopGroup sharedEventLoopGroup() {
-		return new NioEventLoopGroup(Environment.PROCESSORS, new NamedDaemonThreadFactory("gitter-slack-relay"));
+		return new NioEventLoopGroup(Processors.DEFAULT_POOL_SIZE, new NamedDaemonThreadFactory("gitter-slack-relay"));
 	}
 
 	/**
@@ -108,12 +100,12 @@ public class GitterSlackRelayApplication {
 	 *
 	 * @return
 	 */
-	public Promise<Void> gitterSlackRelay() {
+	public Stream<Void> gitterSlackRelay() {
 		return httpClient()
 				.get(gitterStreamUrl, gitterStreamHandler())
 				.flatMap(replies -> replies
 								.filter(b -> b.remaining() > 2) // ignore gitter keep-alives (\r)
-								.decode(new JsonCodec<>(Map.class)) // ObjectMapper.readValue(Map.class)
+								.map(new JsonCodec<>(Map.class).decoder()) // ObjectMapper.readValue(Map.class)
 								.window(10, 1, TimeUnit.SECONDS) // microbatch 10 items or 1s worth into individual streams (for reduce ops)
 								.flatMap(w -> postToSlack(
 										w.map(m -> formatLink(m) + ": " + formatText(m))
@@ -122,7 +114,7 @@ public class GitterSlackRelayApplication {
 				); // only complete when all windows have completed AND gitter GET connection has closed
 	}
 
-	private Promise<Void> postToSlack(Stream<String> input) {
+	private Stream<Void> postToSlack(Stream<String> input) {
 		return httpClient(spec -> spec.options(clientSocketOptions()))
 				.post(slackWebhookUrl, out ->
 								out.header(Headers.CONTENT_TYPE, "application/json")
