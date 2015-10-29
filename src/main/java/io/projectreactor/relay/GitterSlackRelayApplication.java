@@ -14,8 +14,7 @@ import reactor.Processors;
 import reactor.core.support.NamedDaemonThreadFactory;
 import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
-import reactor.io.net.ReactorChannelHandler;
-import reactor.io.net.http.HttpChannel;
+import reactor.io.net.http.ReactorHttpHandler;
 import reactor.io.net.http.model.Headers;
 import reactor.io.net.impl.netty.NettyClientSocketOptions;
 import reactor.rx.Stream;
@@ -87,7 +86,7 @@ public class GitterSlackRelayApplication {
 	 * @return
 	 */
 	@Bean
-	public ReactorChannelHandler<Buffer, Buffer, HttpChannel<Buffer, Buffer>> gitterStreamHandler() {
+	public ReactorHttpHandler<Buffer, Buffer> gitterStreamHandler() {
 		return ch -> {
 			ch.header("Authorization", "Bearer " + gitterToken)
 					.header("Accept", "application/json");
@@ -104,10 +103,10 @@ public class GitterSlackRelayApplication {
 		return httpClient()
 				.get(gitterStreamUrl, gitterStreamHandler())
 				.flatMap(replies -> replies
-								.filter(b -> b.remaining() > 2) // ignore gitter keep-alives (\r)
-								.map(new JsonCodec<>(Map.class).decoder()) // ObjectMapper.readValue(Map.class)
-								.window(10, 1, TimeUnit.SECONDS) // microbatch 10 items or 1s worth into individual streams (for reduce ops)
-								.flatMap(w -> postToSlack(
+						.filter(b -> b.remaining() > 2) // ignore gitter keep-alives (\r)
+						.map(new JsonCodec<>(Map.class).decoder()) // ObjectMapper.readValue(Map.class)
+						.window(10, 1, TimeUnit.SECONDS) // microbatch 10 items or 1s worth into individual streams (for reduce ops)
+						.flatMap(w -> postToSlack(
 										w.map(m -> formatLink(m) + ": " + formatText(m))
 										.reduce("", GitterSlackRelayApplication::appendLines))
 								)
