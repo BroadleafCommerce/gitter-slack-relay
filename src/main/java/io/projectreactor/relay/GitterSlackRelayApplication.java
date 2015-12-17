@@ -14,7 +14,7 @@ import reactor.Processors;
 import reactor.core.support.NamedDaemonThreadFactory;
 import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
-import reactor.io.net.http.ReactorHttpHandler;
+import reactor.rx.net.http.ReactorHttpHandler;
 import reactor.io.net.http.model.Headers;
 import reactor.io.net.impl.netty.NettyClientSocketOptions;
 import reactor.rx.Stream;
@@ -25,7 +25,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.jayway.jsonpath.JsonPath.read;
-import static reactor.io.net.NetStreams.httpClient;
+import static reactor.rx.net.NetStreams.httpClient;
 
 /**
  * A Spring Boot application that relays messages from a Gitter chat room to a Slack webhook to aggregate content into
