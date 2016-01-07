@@ -1,28 +1,29 @@
 package io.projectreactor.relay;
 
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import io.netty.channel.nio.NioEventLoopGroup;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
+import reactor.Mono;
+import reactor.Processors;
+import reactor.core.support.NamedDaemonThreadFactory;
+import reactor.io.buffer.Buffer;
+import reactor.io.codec.json.JsonCodec;
+import reactor.io.net.http.model.Headers;
+import reactor.io.net.impl.netty.NettyClientSocketOptions;
+import reactor.rx.Stream;
+import reactor.rx.net.http.ReactorHttpHandler;
+
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
-import reactor.Processors;
-import reactor.core.support.NamedDaemonThreadFactory;
-import reactor.io.buffer.Buffer;
-import reactor.io.codec.json.JsonCodec;
-import reactor.rx.net.http.ReactorHttpHandler;
-import reactor.io.net.http.model.Headers;
-import reactor.io.net.impl.netty.NettyClientSocketOptions;
-import reactor.rx.Stream;
-import reactor.rx.Streams;
-
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.jayway.jsonpath.JsonPath.read;
 import static reactor.rx.net.NetStreams.httpClient;
@@ -90,7 +91,7 @@ public class GitterSlackRelayApplication {
 		return ch -> {
 			ch.header("Authorization", "Bearer " + gitterToken)
 					.header("Accept", "application/json");
-			return Streams.never();
+			return Stream.never();
 		};
 	}
 
@@ -99,7 +100,7 @@ public class GitterSlackRelayApplication {
 	 *
 	 * @return
 	 */
-	public Stream<Void> gitterSlackRelay() {
+	public Mono<Void> gitterSlackRelay() {
 		return httpClient()
 				.get(gitterStreamUrl, gitterStreamHandler())
 				.flatMap(replies -> replies
@@ -110,30 +111,32 @@ public class GitterSlackRelayApplication {
 										w.map(m -> formatLink(m) + ": " + formatText(m))
 										.reduce("", GitterSlackRelayApplication::appendLines))
 								)
-				); // only complete when all windows have completed AND gitter GET connection has closed
+				)
+				.after(); // only complete when all windows have completed AND gitter GET connection has closed
 	}
 
-	private Stream<Void> postToSlack(Stream<String> input) {
+	private Mono<Void> postToSlack(Mono<String> input) {
 		return httpClient(spec -> spec.options(clientSocketOptions()))
 				.post(slackWebhookUrl, out ->
 								out.header(Headers.CONTENT_TYPE, "application/json")
 										.writeWith(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
 						//will close after write has flushed the batched window
 				)
-				.flatMap(Stream::after); //promote completion to returned promise when last reply has been consumed (usually 1 from slack response packet)
+				.then(Stream::after); //promote completion to returned promise when last reply has been consumed
+		// (usually 1 from slack response packet)
 	}
 
 	public static void main(String[] args) throws Throwable {
 		ApplicationContext ctx = SpringApplication.run(GitterSlackRelayApplication.class, args);
 		GitterSlackRelayApplication app = ctx.getBean(GitterSlackRelayApplication.class);
 
-		Stream<Void> clientState = Streams
+		Stream<Void> clientState = Stream
 				.defer(app::gitterSlackRelay)
 				.log("gitter-client-state")
 				.repeat() //keep alive if get client closes
 				.retry(); //keep alive if any error
 
-		Streams.await(clientState);
+		Stream.await(clientState);
 	}
 
 	private static String formatDate(Object o) {
