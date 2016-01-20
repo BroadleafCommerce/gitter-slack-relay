@@ -11,7 +11,7 @@ import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Processors;
-import reactor.core.support.NamedDaemonThreadFactory;
+import reactor.core.support.ExecutorUtils;
 import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
 import reactor.io.net.http.model.Headers;
@@ -67,7 +67,7 @@ public class GitterSlackRelayApplication {
 	 */
 	@Bean
 	public NioEventLoopGroup sharedEventLoopGroup() {
-		return new NioEventLoopGroup(Processors.DEFAULT_POOL_SIZE, new NamedDaemonThreadFactory("gitter-slack-relay"));
+		return new NioEventLoopGroup(Processors.DEFAULT_POOL_SIZE, ExecutorUtils.newNamedFactory("gitter-slack-relay"));
 	}
 
 	/**
@@ -82,7 +82,7 @@ public class GitterSlackRelayApplication {
 
 	/**
 	 * Handler for setting the Authorization and Accept headers and leaves the connection open by returning {@link
-	 * reactor.rx.Streams#never()}.
+	 * reactor.rx.Stream#never()}.
 	 *
 	 * @return
 	 */
