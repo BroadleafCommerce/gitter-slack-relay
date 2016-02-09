@@ -1,6 +1,7 @@
 package io.projectreactor.relay;
 
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -130,13 +131,16 @@ public class GitterSlackRelayApplication {
 		ApplicationContext ctx = SpringApplication.run(GitterSlackRelayApplication.class, args);
 		GitterSlackRelayApplication app = ctx.getBean(GitterSlackRelayApplication.class);
 
-		Stream<Void> clientState = Stream
+		Stream
 				.defer(app::gitterSlackRelay)
 				.log("gitter-client-state")
 				.repeat() //keep alive if get client closes
-				.retry(); //keep alive if any error
+				.retry() //keep alive if any error
+				.subscribe();
 
-		Stream.await(clientState);
+		CountDownLatch latch = new CountDownLatch(1);
+		latch.await();
+
 	}
 
 	private static String formatDate(Object o) {
