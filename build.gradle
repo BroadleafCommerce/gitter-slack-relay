@@ -47,7 +47,7 @@ dependencies {
       "io.projectreactor:reactor-core:$reactorVersion",
       "io.projectreactor:reactor-bus:$reactorVersion",
       "io.projectreactor:reactor-codec:$reactorVersion",
-      "io.projectreactor:reactor-stream:$reactorVersion",
+      "io.projectreactor:reactor-fluxion:$reactorVersion",
       "io.projectreactor:reactor-net:$reactorVersion",
       "com.jayway.jsonpath:json-path:$jsonPathVersion",
       "joda-time:joda-time:2.8.1",

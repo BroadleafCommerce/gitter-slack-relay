@@ -17,7 +17,7 @@ import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
 import reactor.io.net.http.model.Headers;
 import reactor.io.net.impl.netty.NettyClientSocketOptions;
-import reactor.rx.Stream;
+import reactor.rx.Fluxion;
 import reactor.rx.net.http.ReactorHttpHandler;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -83,7 +83,7 @@ public class GitterSlackRelayApplication {
 
 	/**
 	 * Handler for setting the Authorization and Accept headers and leaves the connection open by returning {@link
-	 * reactor.rx.Stream#never()}.
+	 * reactor.rx.Fluxion#never()}.
 	 *
 	 * @return
 	 */
@@ -92,7 +92,7 @@ public class GitterSlackRelayApplication {
 		return ch -> {
 			ch.header("Authorization", "Bearer " + gitterToken)
 					.header("Accept", "application/json");
-			return Stream.never();
+			return Mono.never();
 		};
 	}
 
@@ -123,7 +123,7 @@ public class GitterSlackRelayApplication {
 										.writeWith(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
 						//will close after write has flushed the batched window
 				)
-				.then(Stream::after); //promote completion to returned promise when last reply has been consumed
+				.then(Fluxion::after); //promote completion to returned promise when last reply has been consumed
 		// (usually 1 from slack response packet)
 	}
 
