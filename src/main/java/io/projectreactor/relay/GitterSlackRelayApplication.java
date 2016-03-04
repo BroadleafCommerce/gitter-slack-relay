@@ -10,6 +10,7 @@ import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SchedulerGroup;
 import reactor.core.util.ExecutorUtils;
@@ -17,7 +18,6 @@ import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
 import reactor.io.net.http.model.Headers;
 import reactor.io.net.impl.netty.NettyClientSocketOptions;
-import reactor.rx.Fluxion;
 import reactor.rx.net.http.ReactorHttpHandler;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -83,7 +83,7 @@ public class GitterSlackRelayApplication {
 
 	/**
 	 * Handler for setting the Authorization and Accept headers and leaves the connection open by returning {@link
-	 * reactor.rx.Fluxion#never()}.
+	 * Flux#never()}.
 	 *
 	 * @return
 	 */
@@ -107,7 +107,7 @@ public class GitterSlackRelayApplication {
 				.flatMap(replies -> replies
 						.filter(b -> b.remaining() > 2) // ignore gitter keep-alives (\r)
 						.map(new JsonCodec<>(Map.class).decoder()) // ObjectMapper.readValue(Map.class)
-						.window(10, 1, TimeUnit.SECONDS) // microbatch 10 items or 1s worth into individual streams (for reduce ops)
+						.window(10, 1_000) // microbatch 10 items or 1s worth into individual streams (for reduce ops)
 						.flatMap(w -> postToSlack(
 										w.map(m -> formatLink(m) + ": " + formatText(m))
 										.reduce("", GitterSlackRelayApplication::appendLines))
@@ -123,7 +123,7 @@ public class GitterSlackRelayApplication {
 										.writeWith(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
 						//will close after write has flushed the batched window
 				)
-				.then(Fluxion::after); //promote completion to returned promise when last reply has been consumed
+				.then(Mono::empty); //promote completion to returned promise when last reply has been consumed
 		// (usually 1 from slack response packet)
 	}
 
@@ -131,7 +131,7 @@ public class GitterSlackRelayApplication {
 		ApplicationContext ctx = SpringApplication.run(GitterSlackRelayApplication.class, args);
 		GitterSlackRelayApplication app = ctx.getBean(GitterSlackRelayApplication.class);
 
-		Stream
+		Flux
 				.defer(app::gitterSlackRelay)
 				.log("gitter-client-state")
 				.repeat() //keep alive if get client closes
