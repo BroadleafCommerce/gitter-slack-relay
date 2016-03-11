@@ -17,7 +17,7 @@ import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
 import reactor.io.netty.http.HttpChannel;
 import reactor.io.netty.http.model.Headers;
-import reactor.io.netty.impl.netty.NettyClientSocketOptions;
+import reactor.io.netty.NettyClientSocketOptions;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
