@@ -2,7 +2,6 @@ package io.projectreactor.relay;
 
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.channel.nio.NioEventLoopGroup;
@@ -16,9 +15,9 @@ import reactor.core.publisher.SchedulerGroup;
 import reactor.core.util.ExecutorUtils;
 import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
-import reactor.io.net.http.model.Headers;
-import reactor.io.net.impl.netty.NettyClientSocketOptions;
-import reactor.rx.net.http.ReactorHttpHandler;
+import reactor.io.netty.http.HttpChannel;
+import reactor.io.netty.http.model.Headers;
+import reactor.io.netty.impl.netty.NettyClientSocketOptions;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -27,7 +26,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 
 import static com.jayway.jsonpath.JsonPath.read;
-import static reactor.rx.net.NetStreams.httpClient;
+import static reactor.io.netty.ReactiveNet.httpClient;
 
 /**
  * A Spring Boot application that relays messages from a Gitter chat room to a Slack webhook to aggregate content into
@@ -72,7 +71,7 @@ public class GitterSlackRelayApplication {
 	}
 
 	/**
-	 * Reactor {@link reactor.io.net.config.ClientSocketOptions} that pass the {@code sharedEventLoopGroup} to Netty.
+	 * Reactor {@link reactor.io.netty.config.ClientSocketOptions} that pass the {@code sharedEventLoopGroup} to Netty.
 	 *
 	 * @return
 	 */
@@ -88,7 +87,7 @@ public class GitterSlackRelayApplication {
 	 * @return
 	 */
 	@Bean
-	public ReactorHttpHandler<Buffer, Buffer> gitterStreamHandler() {
+	public HttpChannel<Buffer, Buffer> gitterStreamHandler() {
 		return ch -> {
 			ch.header("Authorization", "Bearer " + gitterToken)
 					.header("Accept", "application/json");
@@ -105,6 +104,7 @@ public class GitterSlackRelayApplication {
 		return httpClient()
 				.get(gitterStreamUrl, gitterStreamHandler())
 				.flatMap(replies -> replies
+						.input()
 						.filter(b -> b.remaining() > 2) // ignore gitter keep-alives (\r)
 						.map(new JsonCodec<>(Map.class).decoder()) // ObjectMapper.readValue(Map.class)
 						.window(10, 1_000) // microbatch 10 items or 1s worth into individual streams (for reduce ops)
