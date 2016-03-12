@@ -15,9 +15,10 @@ import reactor.core.publisher.SchedulerGroup;
 import reactor.core.util.ExecutorUtils;
 import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
+import reactor.io.ipc.ChannelFluxHandler;
 import reactor.io.netty.http.HttpChannel;
 import reactor.io.netty.http.model.Headers;
-import reactor.io.netty.NettyClientSocketOptions;
+import reactor.io.netty.config.ClientSocketOptions;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -27,6 +28,7 @@ import org.springframework.context.annotation.Bean;
 
 import static com.jayway.jsonpath.JsonPath.read;
 import static reactor.io.netty.ReactiveNet.httpClient;
+import static reactor.io.netty.http.HttpClient.create;
 
 /**
  * A Spring Boot application that relays messages from a Gitter chat room to a Slack webhook to aggregate content into
@@ -76,8 +78,8 @@ public class GitterSlackRelayApplication {
 	 * @return
 	 */
 	@Bean
-	public NettyClientSocketOptions clientSocketOptions() {
-		return new NettyClientSocketOptions().eventLoopGroup(sharedEventLoopGroup());
+	public ClientSocketOptions clientSocketOptions() {
+		return new ClientSocketOptions().eventLoopGroup(sharedEventLoopGroup());
 	}
 
 	/**
@@ -87,7 +89,7 @@ public class GitterSlackRelayApplication {
 	 * @return
 	 */
 	@Bean
-	public HttpChannel<Buffer, Buffer> gitterStreamHandler() {
+	public ChannelFluxHandler<Buffer, Buffer, HttpChannel<Buffer, Buffer>> gitterStreamHandler() {
 		return ch -> {
 			ch.header("Authorization", "Bearer " + gitterToken)
 					.header("Accept", "application/json");
@@ -101,7 +103,7 @@ public class GitterSlackRelayApplication {
 	 * @return
 	 */
 	public Mono<Void> gitterSlackRelay() {
-		return httpClient()
+		return create()
 				.get(gitterStreamUrl, gitterStreamHandler())
 				.flatMap(replies -> replies
 						.input()
@@ -123,7 +125,7 @@ public class GitterSlackRelayApplication {
 										.writeWith(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
 						//will close after write has flushed the batched window
 				)
-				.then(Mono::empty); //promote completion to returned promise when last reply has been consumed
+				.then(r -> Mono.empty(r.input())); //promote completion to returned promise when last reply has been consumed
 		// (usually 1 from slack response packet)
 	}
 
