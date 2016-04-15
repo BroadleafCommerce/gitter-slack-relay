@@ -3,6 +3,7 @@ package io.projectreactor.relay;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Function;
 
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.handler.codec.http.HttpHeaderNames;
@@ -19,6 +20,7 @@ import reactor.io.codec.json.JsonCodec;
 import reactor.io.ipc.ChannelHandler;
 import reactor.io.netty.config.ClientOptions;
 import reactor.io.netty.http.HttpChannel;
+import reactor.io.netty.http.HttpOutbound;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -88,7 +90,7 @@ public class GitterSlackRelayApplication {
 	 * @return
 	 */
 	@Bean
-	public ChannelHandler<Buffer, Buffer, HttpChannel> gitterStreamHandler() {
+	public Function<HttpOutbound, Mono<Void>> gitterStreamHandler() {
 		return ch -> {
 			ch.header("Authorization", "Bearer " + gitterToken)
 					.header("Accept", "application/json");
@@ -105,7 +107,7 @@ public class GitterSlackRelayApplication {
 		return create()
 				.get(gitterStreamUrl, gitterStreamHandler())
 				.flatMap(replies -> replies
-						.receive()
+						.receiveBody()
 						.filter(b -> b.remaining() > 2) // ignore gitter keep-alives (\r)
 						.map(new JsonCodec<>(Map.class).decoder()) // ObjectMapper.readValue(Map.class)
 						.window(10, 1_000) // microbatch 10 items or 1s worth into individual streams (for reduce ops)
@@ -121,10 +123,10 @@ public class GitterSlackRelayApplication {
 		return create(clientSocketOptions())
 				.post(slackWebhookUrl, out ->
 								out.header(HttpHeaderNames.CONTENT_TYPE, "application/json")
-										.send(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
+										.sendBody(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
 						//will close after write has flushed the batched window
 				)
-				.then(r -> Mono.empty(r.receive())); //promote completion to returned promise when last reply has been
+				.then(r -> Mono.empty(r.receiveBody())); //promote completion to returned promise when last reply has been
 		// consumed
 		// (usually 1 from slack response packet)
 	}
