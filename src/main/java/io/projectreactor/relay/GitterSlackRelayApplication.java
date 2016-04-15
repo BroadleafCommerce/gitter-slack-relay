@@ -16,7 +16,7 @@ import reactor.core.publisher.SchedulerGroup;
 import reactor.core.util.ExecutorUtils;
 import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
-import reactor.io.ipc.ChannelFluxHandler;
+import reactor.io.ipc.ChannelHandler;
 import reactor.io.netty.config.ClientOptions;
 import reactor.io.netty.http.HttpChannel;
 
@@ -88,7 +88,7 @@ public class GitterSlackRelayApplication {
 	 * @return
 	 */
 	@Bean
-	public ChannelFluxHandler<Buffer, Buffer, HttpChannel> gitterStreamHandler() {
+	public ChannelHandler<Buffer, Buffer, HttpChannel> gitterStreamHandler() {
 		return ch -> {
 			ch.header("Authorization", "Bearer " + gitterToken)
 					.header("Accept", "application/json");
