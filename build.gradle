@@ -1,7 +1,6 @@
 ext {
   reactorVersion = '2.5.0.BUILD-SNAPSHOT'
   jsonPathVersion = '2.0.0'
-  nettyVersion = '4.0.27.Final'
 }
 
 buildscript {
@@ -49,8 +48,7 @@ dependencies {
       "io.projectreactor:reactor-codec:$reactorVersion",
       "io.projectreactor:reactor-netty:$reactorVersion",
       "com.jayway.jsonpath:json-path:$jsonPathVersion",
-      "joda-time:joda-time:2.8.1",
-      "io.netty:netty-all:$nettyVersion"
+      "joda-time:joda-time:2.8.1"
 
   testCompile "org.springframework.boot:spring-boot-starter-test"
 }

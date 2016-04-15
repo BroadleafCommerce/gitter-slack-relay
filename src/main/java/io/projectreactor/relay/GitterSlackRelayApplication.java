@@ -5,6 +5,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.handler.codec.http.HttpHeaderNames;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
@@ -16,9 +17,8 @@ import reactor.core.util.ExecutorUtils;
 import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
 import reactor.io.ipc.ChannelFluxHandler;
+import reactor.io.netty.config.ClientOptions;
 import reactor.io.netty.http.HttpChannel;
-import reactor.io.netty.http.model.Headers;
-import reactor.io.netty.config.ClientSocketOptions;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -27,7 +27,6 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 
 import static com.jayway.jsonpath.JsonPath.read;
-import static reactor.io.netty.ReactiveNet.httpClient;
 import static reactor.io.netty.http.HttpClient.create;
 
 /**
@@ -73,13 +72,13 @@ public class GitterSlackRelayApplication {
 	}
 
 	/**
-	 * Reactor {@link reactor.io.netty.config.ClientSocketOptions} that pass the {@code sharedEventLoopGroup} to Netty.
+	 * Reactor {@link reactor.io.netty.config.ClientOptions} that pass the {@code sharedEventLoopGroup} to Netty.
 	 *
 	 * @return
 	 */
 	@Bean
-	public ClientSocketOptions clientSocketOptions() {
-		return new ClientSocketOptions().eventLoopGroup(sharedEventLoopGroup());
+	public ClientOptions clientSocketOptions() {
+		return ClientOptions.create().eventLoopGroup(sharedEventLoopGroup());
 	}
 
 	/**
@@ -89,7 +88,7 @@ public class GitterSlackRelayApplication {
 	 * @return
 	 */
 	@Bean
-	public ChannelFluxHandler<Buffer, Buffer, HttpChannel<Buffer, Buffer>> gitterStreamHandler() {
+	public ChannelFluxHandler<Buffer, Buffer, HttpChannel> gitterStreamHandler() {
 		return ch -> {
 			ch.header("Authorization", "Bearer " + gitterToken)
 					.header("Accept", "application/json");
@@ -106,7 +105,7 @@ public class GitterSlackRelayApplication {
 		return create()
 				.get(gitterStreamUrl, gitterStreamHandler())
 				.flatMap(replies -> replies
-						.input()
+						.receive()
 						.filter(b -> b.remaining() > 2) // ignore gitter keep-alives (\r)
 						.map(new JsonCodec<>(Map.class).decoder()) // ObjectMapper.readValue(Map.class)
 						.window(10, 1_000) // microbatch 10 items or 1s worth into individual streams (for reduce ops)
@@ -119,13 +118,14 @@ public class GitterSlackRelayApplication {
 	}
 
 	private Mono<Void> postToSlack(Mono<String> input) {
-		return httpClient(spec -> spec.options(clientSocketOptions()))
+		return create(clientSocketOptions())
 				.post(slackWebhookUrl, out ->
-								out.header(Headers.CONTENT_TYPE, "application/json")
-										.writeWith(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
+								out.header(HttpHeaderNames.CONTENT_TYPE, "application/json")
+										.send(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
 						//will close after write has flushed the batched window
 				)
-				.then(r -> Mono.empty(r.input())); //promote completion to returned promise when last reply has been consumed
+				.then(r -> Mono.empty(r.receive())); //promote completion to returned promise when last reply has been
+		// consumed
 		// (usually 1 from slack response packet)
 	}
 
