@@ -107,7 +107,7 @@ public class GitterSlackRelayApplication {
 		return create()
 				.get(gitterStreamUrl, gitterStreamHandler())
 				.flatMap(replies -> replies
-						.receiveBody()
+						.receive()
 						.filter(b -> b.remaining() > 2) // ignore gitter keep-alives (\r)
 						.map(new JsonCodec<>(Map.class).decoder()) // ObjectMapper.readValue(Map.class)
 						.window(10, 1_000) // microbatch 10 items or 1s worth into individual streams (for reduce ops)
@@ -123,10 +123,10 @@ public class GitterSlackRelayApplication {
 		return create(clientSocketOptions())
 				.post(slackWebhookUrl, out ->
 								out.header(HttpHeaderNames.CONTENT_TYPE, "application/json")
-										.sendBody(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
+										.send(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
 						//will close after write has flushed the batched window
 				)
-				.then(r -> Mono.empty(r.receiveBody())); //promote completion to returned promise when last reply has been
+				.then(r -> Mono.empty(r.receive())); //promote completion to returned promise when last reply has been
 		// consumed
 		// (usually 1 from slack response packet)
 	}
