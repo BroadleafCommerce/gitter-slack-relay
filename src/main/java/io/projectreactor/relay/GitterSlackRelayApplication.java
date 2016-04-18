@@ -1,10 +1,12 @@
 package io.projectreactor.relay;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import org.joda.time.DateTime;
@@ -14,12 +16,10 @@ import org.joda.time.format.ISODateTimeFormat;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SchedulerGroup;
+import reactor.core.util.Exceptions;
 import reactor.core.util.ExecutorUtils;
-import reactor.io.buffer.Buffer;
 import reactor.io.codec.json.JsonCodec;
-import reactor.io.ipc.ChannelHandler;
 import reactor.io.netty.config.ClientOptions;
-import reactor.io.netty.http.HttpChannel;
 import reactor.io.netty.http.HttpOutbound;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -104,12 +104,21 @@ public class GitterSlackRelayApplication {
 	 * @return
 	 */
 	public Mono<Void> gitterSlackRelay() {
+		ObjectMapper mapper = new ObjectMapper();
 		return create()
 				.get(gitterStreamUrl, gitterStreamHandler())
 				.flatMap(replies -> replies
-						.receive()
-						.filter(b -> b.remaining() > 2) // ignore gitter keep-alives (\r)
-						.map(new JsonCodec<>(Map.class).decoder()) // ObjectMapper.readValue(Map.class)
+						.receiveByteArray()
+						.filter(b -> b.length > 2) // ignore gitter keep-alives (\r)
+						.map(b -> {
+							try {
+								return mapper.readValue(b, Map.class);
+							}
+							catch (IOException e) {
+								throw Exceptions.propagate(e);
+							}
+						}) // ObjectMapper.readValue(Map
+						// .class)
 						.window(10, 1_000) // microbatch 10 items or 1s worth into individual streams (for reduce ops)
 						.flatMap(w -> postToSlack(
 										w.map(m -> formatLink(m) + ": " + formatText(m))
@@ -123,10 +132,10 @@ public class GitterSlackRelayApplication {
 		return create(clientSocketOptions())
 				.post(slackWebhookUrl, out ->
 								out.header(HttpHeaderNames.CONTENT_TYPE, "application/json")
-										.send(input.map(s -> Buffer.wrap("{\"text\": \"" + s + "\"}")))
+								   .sendString(input.map(s -> "{\"text\": \"" + s + "\"}"))
 						//will close after write has flushed the batched window
 				)
-				.then(r -> Mono.empty(r.receive())); //promote completion to returned promise when last reply has been
+				.then(r -> r.receive().after()); //promote completion to returned promise when last reply has been
 		// consumed
 		// (usually 1 from slack response packet)
 	}
