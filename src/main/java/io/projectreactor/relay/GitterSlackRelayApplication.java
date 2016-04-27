@@ -125,7 +125,7 @@ public class GitterSlackRelayApplication {
 										.reduce("", GitterSlackRelayApplication::appendLines))
 								)
 				)
-				.after(); // only complete when all windows have completed AND gitter GET connection has closed
+				.then(); // only complete when all windows have completed AND gitter GET connection has closed
 	}
 
 	private Mono<Void> postToSlack(Mono<String> input) {
@@ -135,7 +135,7 @@ public class GitterSlackRelayApplication {
 								   .sendString(input.map(s -> "{\"text\": \"" + s + "\"}"))
 						//will close after write has flushed the batched window
 				)
-				.then(r -> r.receive().after()); //promote completion to returned promise when last reply has been
+				.then(r -> r.receive().then()); //promote completion to returned promise when last reply has been
 		// consumed
 		// (usually 1 from slack response packet)
 	}
