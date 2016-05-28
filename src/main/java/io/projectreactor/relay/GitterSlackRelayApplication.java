@@ -15,10 +15,9 @@ import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
-import reactor.core.publisher.Computations;
 import reactor.core.util.Exceptions;
 import reactor.core.util.ExecutorUtils;
-
+import reactor.core.util.PlatformDependent;
 import reactor.io.netty.config.ClientOptions;
 import reactor.io.netty.http.HttpOutbound;
 
@@ -70,7 +69,7 @@ public class GitterSlackRelayApplication {
 	 */
 	@Bean
 	public NioEventLoopGroup sharedEventLoopGroup() {
-		return new NioEventLoopGroup(Computations.DEFAULT_POOL_SIZE, ExecutorUtils.newNamedFactory("gitter-slack-relay"));
+		return new NioEventLoopGroup(PlatformDependent.DEFAULT_POOL_SIZE, ExecutorUtils.newNamedFactory("gitter-slack-relay"));
 	}
 
 	/**
