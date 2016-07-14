@@ -1,5 +1,5 @@
 ext {
-  reactorVersion = '2.5.0.BUILD-SNAPSHOT'
+  reactorVersion = '3.0.0.BUILD-SNAPSHOT'
   jsonPathVersion = '2.0.0'
 }
 
