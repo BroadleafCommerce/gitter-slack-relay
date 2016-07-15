@@ -1,5 +1,6 @@
 ext {
   reactorVersion = '3.0.0.BUILD-SNAPSHOT'
+  reactorNetty = '0.5.0.BUILD-SNAPSHOT'
   jsonPathVersion = '2.0.0'
 }
 
@@ -45,8 +46,8 @@ dependencies {
       "org.springframework.boot:spring-boot-starter-web",
       "io.projectreactor:reactor-core:$reactorVersion",
       "io.projectreactor:reactor-bus:$reactorVersion",
-      "io.projectreactor:reactor-codec:$reactorVersion",
-      "io.projectreactor:reactor-netty:$reactorVersion",
+      "io.projectreactor:reactor-codec:$reactorNetty",
+      "io.projectreactor:reactor-netty:$reactorNetty",
       "com.jayway.jsonpath:json-path:$jsonPathVersion",
       "joda-time:joda-time:2.8.1"
 

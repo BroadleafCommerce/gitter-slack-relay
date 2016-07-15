@@ -16,7 +16,7 @@ import org.joda.time.format.ISODateTimeFormat;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.util.Exceptions;
-import reactor.util.ReactorProperties;
+import reactor.core.Reactor;
 import reactor.io.netty.config.ClientOptions;
 import reactor.io.netty.http.HttpOutbound;
 
