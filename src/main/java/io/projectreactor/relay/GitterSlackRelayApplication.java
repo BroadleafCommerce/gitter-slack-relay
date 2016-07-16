@@ -68,7 +68,7 @@ public class GitterSlackRelayApplication {
 	 */
 	@Bean
 	public NioEventLoopGroup sharedEventLoopGroup() {
-		return new NioEventLoopGroup(PlatformDependent.DEFAULT_POOL_SIZE,
+		return new NioEventLoopGroup(Reactor.DEFAULT_POOL_SIZE,
 				(Runnable r) -> new Thread(r, "gitter-slack-relay"));
 	}
 
