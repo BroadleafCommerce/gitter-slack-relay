@@ -17,8 +17,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.core.Exceptions;
-import reactor.io.netty.config.ClientOptions;
-import reactor.io.netty.http.HttpOutbound;
+import reactor.ipc.netty.config.ClientOptions;
+import reactor.ipc.netty.http.HttpOutbound;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
@@ -27,7 +27,7 @@ import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 
 import static com.jayway.jsonpath.JsonPath.read;
-import static reactor.io.netty.http.HttpClient.create;
+import static reactor.ipc.netty.http.HttpClient.create;
 
 /**
  * A Spring Boot application that relays messages from a Gitter chat room to a Slack webhook to aggregate content into
@@ -73,7 +73,7 @@ public class GitterSlackRelayApplication {
 	}
 
 	/**
-	 * Reactor {@link reactor.io.netty.config.ClientOptions} that pass the {@code sharedEventLoopGroup} to Netty.
+	 * Reactor {@link reactor.ipc.netty.config.ClientOptions} that pass the {@code sharedEventLoopGroup} to Netty.
 	 *
 	 * @return
 	 */
