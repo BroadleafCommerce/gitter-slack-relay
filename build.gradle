@@ -1,6 +1,6 @@
 ext {
-  reactorVersion = '3.0.0.BUILD-SNAPSHOT'
-  reactorNetty = '0.5.0.BUILD-SNAPSHOT'
+  reactorVersion = '3.0.0.RELEASE'
+  reactorNetty = '0.5.0.RELEASE'
   jsonPathVersion = '2.0.0'
 }
 
@@ -35,22 +35,22 @@ targetCompatibility = 1.8
 
 repositories {
   mavenLocal()
+  maven { url "https://repo.spring.io/release" }
   maven { url "https://repo.spring.io/snapshot" }
-  maven { url "https://repo.spring.io/milestone" }
   jcenter()
 }
 
 
 dependencies {
-  compile "org.springframework.boot:spring-boot-starter-actuator",
-      "org.springframework.boot:spring-boot-starter-web",
-      "io.projectreactor:reactor-core:$reactorVersion",
-      "io.projectreactor.ipc:reactor-bus:$reactorVersion",
-      "io.projectreactor.ipc:reactor-codec:$reactorNetty",
-      "io.projectreactor.ipc:reactor-netty:$reactorNetty",
-      "com.jayway.jsonpath:json-path:$jsonPathVersion",
-      "joda-time:joda-time:2.8.1"
 
+  compile "org.springframework.boot:spring-boot-starter-actuator",
+          "org.springframework.boot:spring-boot-starter-web",
+          "io.projectreactor:reactor-core:$reactorVersion",
+          "io.projectreactor.ipc:reactor-bus:$reactorVersion",
+          "io.projectreactor.addons:reactor-codec:$reactorNetty",
+          "io.projectreactor.ipc:reactor-netty:$reactorNetty",
+          "com.jayway.jsonpath:json-path:$jsonPathVersion",
+          "joda-time:joda-time:2.8.1"
   testCompile "org.springframework.boot:spring-boot-starter-test"
 }
 
