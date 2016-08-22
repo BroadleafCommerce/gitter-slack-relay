@@ -46,7 +46,7 @@ dependencies {
   compile "org.springframework.boot:spring-boot-starter-actuator",
           "org.springframework.boot:spring-boot-starter-web",
           "io.projectreactor:reactor-core:$reactorVersion",
-          "io.projectreactor.ipc:reactor-bus:$reactorVersion",
+          "io.projectreactor.addons:reactor-bus:$reactorNetty",
           "io.projectreactor.addons:reactor-codec:$reactorNetty",
           "io.projectreactor.ipc:reactor-netty:$reactorNetty",
           "com.jayway.jsonpath:json-path:$jsonPathVersion",
