@@ -1,6 +1,6 @@
 ext {
   reactorVersion = '3.0.1.RELEASE'
-  reactorNetty = '0.5.0.RELEASE'
+  reactorNetty = '0.5.1.RELEASE'
   jsonPathVersion = '2.0.0'
 }
 
