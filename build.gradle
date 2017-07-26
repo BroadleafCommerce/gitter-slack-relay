@@ -1,6 +1,6 @@
 ext {
-  reactorVersion = '3.0.2.RELEASE'
-  reactorNetty = '0.5.1.RELEASE'
+  reactorVersion = '3.0.7.RELEASE'
+  reactorNetty = '0.6.4.RELEASE'
   jsonPathVersion = '2.0.0'
 }
 
@@ -10,8 +10,7 @@ buildscript {
   }
 
   repositories {
-    maven { url "https://repo.spring.io/snapshot" }
-    maven { url "https://repo.spring.io/milestone" }
+    mavenCentral()
     jcenter()
   }
 
@@ -35,8 +34,7 @@ targetCompatibility = 1.8
 
 repositories {
   mavenLocal()
-  maven { url "https://repo.spring.io/release" }
-  maven { url "https://repo.spring.io/snapshot" }
+  mavenCentral()
   jcenter()
 }
 
@@ -46,8 +44,8 @@ dependencies {
   compile "org.springframework.boot:spring-boot-starter-actuator",
           "org.springframework.boot:spring-boot-starter-web",
           "io.projectreactor:reactor-core:$reactorVersion",
-          "io.projectreactor.addons:reactor-bus:$reactorNetty",
-          "io.projectreactor.addons:reactor-codec:$reactorNetty",
+          //"io.projectreactor:reactor-bus:$reactorNetty",
+          //"io.projectreactor:reactor-codec:$reactorNetty",
           "io.projectreactor.ipc:reactor-netty:$reactorNetty",
           "com.jayway.jsonpath:json-path:$jsonPathVersion",
           "joda-time:joda-time:2.8.1"

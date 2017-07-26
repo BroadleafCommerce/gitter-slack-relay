@@ -1,33 +1,35 @@
 package io.projectreactor.relay;
 
-import java.io.IOException;
-import java.util.Map;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.function.Function;
+import static com.jayway.jsonpath.JsonPath.read;
+import static reactor.ipc.netty.http.client.HttpClient.create;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.handler.codec.http.HttpHeaderNames;
 import org.joda.time.DateTime;
 import org.joda.time.format.DateTimeFormat;
 import org.joda.time.format.DateTimeFormatter;
 import org.joda.time.format.ISODateTimeFormat;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
-import reactor.core.Exceptions;
-import reactor.ipc.netty.config.ClientOptions;
-import reactor.ipc.netty.http.HttpOutbound;
-
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Bean;
 
-import static com.jayway.jsonpath.JsonPath.read;
-import static reactor.ipc.netty.http.HttpClient.create;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.IOException;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
+import java.util.function.Function;
+
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.handler.codec.http.HttpHeaderNames;
+import reactor.core.Exceptions;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+import reactor.ipc.netty.http.client.HttpClientOptions;
+import reactor.ipc.netty.http.client.HttpClientRequest;
 
 /**
  * A Spring Boot application that relays messages from a Gitter chat room to a Slack webhook to aggregate content into
@@ -78,8 +80,8 @@ public class GitterSlackRelayApplication {
 	 * @return
 	 */
 	@Bean
-	public ClientOptions clientSocketOptions() {
-		return ClientOptions.create().eventLoopGroup(sharedEventLoopGroup());
+	public Consumer<HttpClientOptions> clientSocketOptions() {
+		return consumer -> HttpClientOptions.create().eventLoopGroup(sharedEventLoopGroup());
 	}
 
 	/**
@@ -89,7 +91,7 @@ public class GitterSlackRelayApplication {
 	 * @return
 	 */
 	@Bean
-	public Function<HttpOutbound, Mono<Void>> gitterStreamHandler() {
+	public Function<HttpClientRequest, Mono<Void>> gitterStreamHandler() {
 		return ch -> {
 			ch.header("Authorization", "Bearer " + gitterToken)
 					.header("Accept", "application/json");
@@ -106,8 +108,9 @@ public class GitterSlackRelayApplication {
 		ObjectMapper mapper = new ObjectMapper();
 		return create()
 				.get(gitterStreamUrl, gitterStreamHandler())
-				.flatMap(replies -> replies
-						.receiveByteArray()
+				.flatMapMany(replies -> replies
+						.receive()
+						.asByteArray()
 						.filter(b -> b.length > 2) // ignore gitter keep-alives (\r)
 						.map(b -> {
 							try {
@@ -163,7 +166,7 @@ public class GitterSlackRelayApplication {
 	}
 
 	private static String formatLink(Map m) {
-		return "<https://gitter.im/reactor/reactor?at=" +
+		return "<https://gitter.im/BroadleafCommerce/BroadleafCommerce?at=" +
 				read(m, "$.id") + "|" + read(m, "$.fromUser.displayName") +
 				" [" + formatDate(read(m, "$.sent")) + "]>";
 	}

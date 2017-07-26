@@ -17,3 +17,4 @@ out
 build
 *.i*
 .gradle/
+/bin/
